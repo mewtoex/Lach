@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lach Snack Bar - Offline</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #8B4513 0%, #D2691E 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+        }
+
+        .offline-container {
+            text-align: center;
+            padding: 2rem;
+            max-width: 500px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 20px;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+        }
+
+        .offline-icon {
+            font-size: 4rem;
+            margin-bottom: 1rem;
+        }
+
+        h1 {
+            font-size: 2rem;
+            margin-bottom: 1rem;
+            color: #FFE66D;
+        }
+
+        p {
+            font-size: 1.1rem;
+            margin-bottom: 2rem;
+            line-height: 1.6;
+        }
+
+        .retry-button {
+            background: #FFE66D;
+            color: #8B4513;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 25px;
+            font-size: 1rem;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin: 0 10px;
+        }
+
+        .retry-button:hover {
+            background: #FFD700;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(255, 230, 109, 0.4);
+        }
+
+        .offline-features {
+            margin-top: 2rem;
+            text-align: left;
+        }
+
+        .offline-features h3 {
+            color: #FFE66D;
+            margin-bottom: 1rem;
+        }
+
+        .offline-features ul {
+            list-style: none;
+        }
+
+        .offline-features li {
+            margin-bottom: 0.5rem;
+            padding-left: 1.5rem;
+            position: relative;
+        }
+
+        .offline-features li:before {
+            content: "✓";
+            position: absolute;
+            left: 0;
+            color: #4ECDC4;
+            font-weight: bold;
+        }
+
+        .connection-status {
+            margin-top: 1rem;
+            padding: 10px;
+            border-radius: 10px;
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        .status-indicator {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            margin-right: 8px;
+            background: #FF6B6B;
+            animation: pulse 2s infinite;
+        }
+
+        .status-indicator.online {
+            background: #4ECDC4;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+
+        .cached-content {
+            margin-top: 2rem;
+            padding: 1rem;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 10px;
+        }
+
+        .cached-content h4 {
+            color: #FFE66D;
+            margin-bottom: 0.5rem;
+        }
+
+        .cached-links {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            justify-content: center;
+        }
+
+        .cached-link {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 8px 16px;
+            border-radius: 15px;
+            text-decoration: none;
+            color: white;
+            font-size: 0.9rem;
+            transition: all 0.3s ease;
+        }
+
+        .cached-link:hover {
+            background: rgba(255, 255, 255, 0.2);
+            transform: translateY(-1px);
+        }
+    </style>
+</head>
+<body>
+    <div class="offline-container">
+        <div class="offline-icon">📱</div>
+        <h1>Você está offline</h1>
+        <p>
+            Parece que você perdeu a conexão com a internet. 
+            Não se preocupe! Você ainda pode acessar algumas funcionalidades do Lach Snack Bar.
+        </p>
+
+        <div class="connection-status">
+            <span class="status-indicator" id="statusIndicator"></span>
+            <span id="statusText">Verificando conexão...</span>
+        </div>
+
+        <button class="retry-button" onclick="retryConnection()">
+            🔄 Tentar Novamente
+        </button>
+
+        <div class="offline-features">
+            <h3>Funcionalidades disponíveis offline:</h3>
+            <ul>
+                <li>Visualizar cardápio salvo</li>
+                <li>Ver histórico de pedidos</li>
+                <li>Configurações da conta</li>
+                <li>Favoritos salvos</li>
+            </ul>
+        </div>
+
+        <div class="cached-content">
+            <h4>Conteúdo em cache:</h4>
+            <div class="cached-links">
+                <a href="/" class="cached-link">🏠 Início</a>
+                <a href="/menu" class="cached-link">🍽️ Cardápio</a>
+                <a href="/orders" class="cached-link">📋 Meus Pedidos</a>
+                <a href="/profile" class="cached-link">👤 Perfil</a>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Verificar status da conexão
+        function checkConnection() {
+            const statusIndicator = document.getElementById('statusIndicator');
+            const statusText = document.getElementById('statusText');
+            
+            if (navigator.onLine) {
+                statusIndicator.classList.add('online');
+                statusText.textContent = 'Conectado! Redirecionando...';
+                
+                // Redirecionar após 2 segundos
+                setTimeout(() => {
+                    window.location.href = '/';
+                }, 2000);
+            } else {
+                statusIndicator.classList.remove('online');
+                statusText.textContent = 'Sem conexão com a internet';
+            }
+        }
+
+        // Tentar reconectar
+        function retryConnection() {
+            const statusText = document.getElementById('statusText');
+            statusText.textContent = 'Verificando conexão...';
+            
+            // Simular verificação
+            setTimeout(() => {
+                checkConnection();
+            }, 1000);
+        }
+
+        // Event listeners para mudanças de conexão
+        window.addEventListener('online', () => {
+            checkConnection();
+        });
+
+        window.addEventListener('offline', () => {
+            checkConnection();
+        });
+
+        // Verificar status inicial
+        checkConnection();
+
+        // Verificar periodicamente
+        setInterval(checkConnection, 5000);
+
+        // Registrar Service Worker se disponível
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('/sw.js')
+                .then(registration => {
+                    console.log('Service Worker registrado:', registration);
+                })
+                .catch(error => {
+                    console.log('Erro ao registrar Service Worker:', error);
+                });
+        }
+
+        // Sincronizar quando voltar online
+        window.addEventListener('online', () => {
+            if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+                navigator.serviceWorker.controller.postMessage({
+                    type: 'SYNC_OFFLINE_DATA'
+                });
+            }
+        });
+    </script>
+</body>
+</html> 

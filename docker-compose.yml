@@ -1,0 +1,361 @@
+version: '3.8'
+
+services:
+  # Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: lach-postgres
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-lach_db}
+      POSTGRES_USER: ${POSTGRES_USER:-lach_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-lach_password}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - lach-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-lach_user} -d ${POSTGRES_DB:-lach_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Message Broker
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: lach-rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER:-admin}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS:-admin123}
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    networks:
+      - lach-network
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis for caching
+  redis:
+    image: redis:7-alpine
+    container_name: lach-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - lach-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # API Gateway
+  api-gateway:
+    build:
+      context: ./src/Gateway
+      dockerfile: Dockerfile
+    container_name: lach-api-gateway
+    ports:
+      - "5000:5000"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:5000
+      - RabbitMQ__Host=rabbitmq
+      - RabbitMQ__Username=${RABBITMQ_DEFAULT_USER:-admin}
+      - RabbitMQ__Password=${RABBITMQ_DEFAULT_PASS:-admin123}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - lach-network
+
+  # Auth Service
+  auth-service:
+    build:
+      context: ./src/Services/AuthService
+      dockerfile: Dockerfile
+    container_name: lach-auth-service
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ConnectionStrings__PostgreSQL=Host=postgres;Database=${POSTGRES_DB:-lach_db};Username=${POSTGRES_USER:-lach_user};Password=${POSTGRES_PASSWORD:-lach_password}
+      - RabbitMQ__Host=rabbitmq
+      - RabbitMQ__Username=${RABBITMQ_DEFAULT_USER:-admin}
+      - RabbitMQ__Password=${RABBITMQ_DEFAULT_PASS:-admin123}
+      - JWT__SecretKey=${JWT_SECRET_KEY:-your-super-secret-key-with-at-least-32-characters}
+      - JWT__Issuer=${JWT_ISSUER:-lach-system}
+      - JWT__Audience=${JWT_AUDIENCE:-lach-users}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - lach-network
+
+  # Product Service
+  product-service:
+    build:
+      context: ./src/Services/ProductService
+      dockerfile: Dockerfile
+    container_name: lach-product-service
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ConnectionStrings__PostgreSQL=Host=postgres;Database=${POSTGRES_DB:-lach_db};Username=${POSTGRES_USER:-lach_user};Password=${POSTGRES_PASSWORD:-lach_password}
+      - RabbitMQ__Host=rabbitmq
+      - RabbitMQ__Username=${RABBITMQ_DEFAULT_USER:-admin}
+      - RabbitMQ__Password=${RABBITMQ_DEFAULT_PASS:-admin123}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - lach-network
+
+  # Order Service
+  order-service:
+    build:
+      context: ./src/Services/OrderService
+      dockerfile: Dockerfile
+    container_name: lach-order-service
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ConnectionStrings__PostgreSQL=Host=postgres;Database=${POSTGRES_DB:-lach_db};Username=${POSTGRES_USER:-lach_user};Password=${POSTGRES_PASSWORD:-lach_password}
+      - RabbitMQ__Host=rabbitmq
+      - RabbitMQ__Username=${RABBITMQ_DEFAULT_USER:-admin}
+      - RabbitMQ__Password=${RABBITMQ_DEFAULT_PASS:-admin123}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - lach-network
+
+  # Production Queue Service
+  production-queue-service:
+    build:
+      context: ./src/Services/ProductionQueueService
+      dockerfile: Dockerfile
+    container_name: lach-production-queue-service
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ConnectionStrings__PostgreSQL=Host=postgres;Database=${POSTGRES_DB:-lach_db};Username=${POSTGRES_USER:-lach_user};Password=${POSTGRES_PASSWORD:-lach_password}
+      - RabbitMQ__Host=rabbitmq
+      - RabbitMQ__Username=${RABBITMQ_DEFAULT_USER:-admin}
+      - RabbitMQ__Password=${RABBITMQ_DEFAULT_PASS:-admin123}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - lach-network
+
+  # Delivery Service
+  delivery-service:
+    build:
+      context: ./src/Services/DeliveryService
+      dockerfile: Dockerfile
+    container_name: lach-delivery-service
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ConnectionStrings__PostgreSQL=Host=postgres;Database=${POSTGRES_DB:-lach_db};Username=${POSTGRES_USER:-lach_user};Password=${POSTGRES_PASSWORD:-lach_password}
+      - RabbitMQ__Host=rabbitmq
+      - RabbitMQ__Username=${RABBITMQ_DEFAULT_USER:-admin}
+      - RabbitMQ__Password=${RABBITMQ_DEFAULT_PASS:-admin123}
+      - GoogleMaps__ApiKey=${GOOGLE_MAPS_API_KEY}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - lach-network
+
+  # WhatsApp Service
+  whatsapp-service:
+    build:
+      context: ./src/Services/WhatsAppService
+      dockerfile: Dockerfile
+    container_name: lach-whatsapp-service
+    ports:
+      - "5006:5006"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ConnectionStrings__SQLite=Data Source=whatsapp.db
+      - RabbitMQ__Host=rabbitmq
+      - RabbitMQ__Username=${RABBITMQ_DEFAULT_USER:-admin}
+      - RabbitMQ__Password=${RABBITMQ_DEFAULT_PASS:-admin123}
+      - WhatsAppWeb__WebServiceUrl=http://whatsapp-web-service:3003
+      - WhatsAppWeb__TimeoutSeconds=30
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      whatsapp-web-service:
+        condition: service_healthy
+    networks:
+      - lach-network
+
+  # WhatsApp Web Service (Node.js)
+  whatsapp-web-service:
+    build:
+      context: ./whatsapp-web-service
+      dockerfile: Dockerfile
+    container_name: lach-whatsapp-web-service
+    ports:
+      - "3003:3003"
+    environment:
+      - PORT=3003
+      - C_SHARP_SERVICE_URL=http://whatsapp-service:5006
+      - PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
+      - PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
+    volumes:
+      - whatsapp_sessions:/usr/src/app/.wwebjs_auth
+    depends_on:
+      - rabbitmq
+    networks:
+      - lach-network
+
+  # Notification Service
+  notification-service:
+    build:
+      context: ./src/Services/NotificationService
+      dockerfile: Dockerfile
+    container_name: lach-notification-service
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ConnectionStrings__PostgreSQL=Host=postgres;Database=${POSTGRES_DB:-lach_db};Username=${POSTGRES_USER:-lach_user};Password=${POSTGRES_PASSWORD:-lach_password}
+      - RabbitMQ__Host=rabbitmq
+      - RabbitMQ__Username=${RABBITMQ_DEFAULT_USER:-admin}
+      - RabbitMQ__Password=${RABBITMQ_DEFAULT_PASS:-admin123}
+      - Redis__ConnectionString=redis:6379
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - lach-network
+
+  # Frontend (Customer Portal)
+  frontend:
+    build:
+      context: ./src/Frontend
+      dockerfile: Dockerfile
+    container_name: lach-frontend
+    ports:
+      - "3000:3000"
+    environment:
+      - REACT_APP_API_URL=http://localhost:5000
+      - REACT_APP_WS_URL=ws://localhost:5000/ws
+    depends_on:
+      - api-gateway
+    networks:
+      - lach-network
+
+  # Admin Portal
+  admin-portal:
+    build:
+      context: ./src/AdminPortal
+      dockerfile: Dockerfile
+    container_name: lach-admin-portal
+    ports:
+      - "3001:3000"
+    environment:
+      - REACT_APP_API_URL=http://localhost:5000
+      - REACT_APP_WS_URL=ws://localhost:5000/ws
+    depends_on:
+      - api-gateway
+    networks:
+      - lach-network
+
+  # Monitoring Services
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: lach-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./monitoring/prometheus/rules:/etc/prometheus/rules
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=200h'
+      - '--web.enable-lifecycle'
+    networks:
+      - lach-network
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: lach-grafana
+    ports:
+      - "3002:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin123
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards
+      - ./monitoring/grafana/datasources:/etc/grafana/provisioning/datasources
+    depends_on:
+      - prometheus
+    networks:
+      - lach-network
+
+  seq:
+    image: datalust/seq:latest
+    container_name: lach-seq
+    ports:
+      - "5341:80"
+    environment:
+      - ACCEPT_EULA=Y
+    volumes:
+      - seq_data:/data
+    networks:
+      - lach-network
+
+  alertmanager:
+    image: prom/alertmanager:latest
+    container_name: lach-alertmanager
+    ports:
+      - "9093:9093"
+    volumes:
+      - ./monitoring/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml
+      - alertmanager_data:/alertmanager
+    command:
+      - '--config.file=/etc/alertmanager/alertmanager.yml'
+      - '--storage.path=/alertmanager'
+    networks:
+      - lach-network
+
+volumes:
+  postgres_data:
+  rabbitmq_data:
+  redis_data:
+  whatsapp_sessions:
+  prometheus_data:
+  grafana_data:
+  seq_data:
+  alertmanager_data:
+
+networks:
+  lach-network:
+    driver: bridge 
