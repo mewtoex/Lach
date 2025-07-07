@@ -1,111 +1,133 @@
-# Lach System - Test Runner Script
-# Executa todos os testes unitários e de integração
+#!/usr/bin/env pwsh
 
+# Script para executar todos os testes do projeto Lach...
 param(
-    [switch]$Unit,
-    [switch]$Integration,
-    [switch]$All,
     [switch]$Coverage,
-    [string]$Service = ""
+    [switch]$Verbose,
+    [string]$Filter = ""
 )
 
-Write-Host "🧪 Lach System - Test Runner" -ForegroundColor Cyan
-Write-Host "================================" -ForegroundColor Cyan
+Write-Host "🚀 Executando testes do projeto Lach..." -ForegroundColor Green
 
-# Default to all tests if no specific type is specified
-if (-not $Unit -and -not $Integration -and -not $All) {
-    $All = $true
-}
-
-# Test projects
-$testProjects = @(
-    "src/Tests/AuthService.Tests/AuthService.Tests.csproj",
-    "src/Tests/OrderService.Tests/OrderService.Tests.csproj",
-    "src/Tests/ProductionQueueService.Tests/ProductionQueueService.Tests.csproj"
+# Configurações
+$TestProjects = @(
+    "tests/ProductService.Tests",
+    "tests/OrderService.Tests", 
+    "tests/AuthService.Tests"
 )
 
-# Filter by service if specified
-if ($Service -ne "") {
-    $testProjects = $testProjects | Where-Object { $_ -like "*$Service*" }
-}
+$Results = @()
+$TotalTests = 0
+$PassedTests = 0
+$FailedTests = 0
 
-$totalTests = 0
-$passedTests = 0
-$failedTests = 0
-
-foreach ($project in $testProjects) {
-    if (Test-Path $project) {
-        Write-Host "`n📋 Running tests for: $project" -ForegroundColor Yellow
+# Função para executar testes de um projeto
+function Run-TestProject {
+    param(
+        [string]$ProjectPath,
+        [string]$ProjectName
+    )
+    
+    Write-Host "`n📋 Executando testes do $ProjectName..." -ForegroundColor Yellow
+    
+    $testArgs = @("test", $ProjectPath, "--verbosity", "normal")
+    
+    if ($Coverage) {
+        $testArgs += @("--collect", "XPlat Code Coverage")
+    }
+    
+    if ($Filter) {
+        $testArgs += @("--filter", $Filter)
+    }
+    
+    if ($Verbose) {
+        $testArgs += @("--logger", "console;verbosity=detailed")
+    }
+    
+    try {
+        $output = & dotnet $testArgs 2>&1
         
-        $projectName = Split-Path (Split-Path $project -Parent) -Leaf
-        $coveragePath = "coverage/$projectName"
-        
-        # Create coverage directory
-        if ($Coverage) {
-            New-Item -ItemType Directory -Force -Path $coveragePath | Out-Null
-        }
-        
-        # Build arguments
-        $args = @("test", $project, "--verbosity", "normal")
-        
-        if ($Coverage) {
-            $args += @(
-                "/p:CollectCoverage=true",
-                "/p:CoverletOutputFormat=opencover",
-                "/p:CoverletOutput=$coveragePath/coverage.xml",
-                "/p:Exclude=`"[*]*.Program,[*]*.Startup`""
-            )
-        }
-        
-        # Run tests
-        try {
-            $result = & dotnet $args
+        if ($LASTEXITCODE -eq 0) {
+            Write-Host "✅ $ProjectName: Todos os testes passaram!" -ForegroundColor Green
             
-            # Parse results
-            $output = $result -join "`n"
-            if ($output -match "Total:\s*(\d+), Errors:\s*(\d+), Failed:\s*(\d+), Skipped:\s*(\d+), Passed:\s*(\d+)") {
-                $total = [int]$matches[1]
-                $errors = [int]$matches[2]
-                $failed = [int]$matches[3]
-                $skipped = [int]$matches[4]
-                $passed = [int]$matches[5]
-                
-                $totalTests += $total
-                $passedTests += $passed
-                $failedTests += ($failed + $errors)
-                
-                if ($failed -eq 0 -and $errors -eq 0) {
-                    Write-Host "✅ $projectName: $passed passed, $skipped skipped" -ForegroundColor Green
-                } else {
-                    Write-Host "❌ $projectName: $failed failed, $errors errors, $passed passed, $skipped skipped" -ForegroundColor Red
-                }
+            # Extrair número de testes
+            $testLine = $output | Where-Object { $_ -match "Total:\s*(\d+)" }
+            if ($testLine) {
+                $testCount = [int]($testLine -replace ".*Total:\s*(\d+).*", '$1')
+                $TotalTests += $testCount
+                $PassedTests += $testCount
+            }
+        } else {
+            Write-Host "❌ $ProjectName: Alguns testes falharam!" -ForegroundColor Red
+            
+            # Extrair número de testes
+            $testLine = $output | Where-Object { $_ -match "Total:\s*(\d+)" }
+            if ($testLine) {
+                $testCount = [int]($testLine -replace ".*Total:\s*(\d+).*", '$1')
+                $TotalTests += $testCount
             }
             
-            # Show coverage if enabled
-            if ($Coverage -and (Test-Path "$coveragePath/coverage.xml")) {
-                Write-Host "📊 Coverage report generated: $coveragePath/coverage.xml" -ForegroundColor Blue
+            $failedLine = $output | Where-Object { $_ -match "Failed:\s*(\d+)" }
+            if ($failedLine) {
+                $failedCount = [int]($failedLine -replace ".*Failed:\s*(\d+).*", '$1')
+                $FailedTests += $failedCount
+                $PassedTests += ($testCount - $failedCount)
             }
-            
-        } catch {
-            Write-Host "❌ Error running tests for $projectName: $_" -ForegroundColor Red
-            $failedTests++
         }
-    } else {
-        Write-Host "⚠️  Test project not found: $project" -ForegroundColor Yellow
+        
+        $Results += @{
+            Project = $ProjectName
+            Success = ($LASTEXITCODE -eq 0)
+            Output = $output
+        }
+        
+    } catch {
+        Write-Host "❌ Erro ao executar testes do $ProjectName: $_" -ForegroundColor Red
+        $Results += @{
+            Project = $ProjectName
+            Success = $false
+            Output = @("Erro: $_")
+        }
     }
 }
 
-# Summary
-Write-Host "`n📊 Test Summary" -ForegroundColor Cyan
-Write-Host "===============" -ForegroundColor Cyan
-Write-Host "Total Tests: $totalTests" -ForegroundColor White
-Write-Host "Passed: $passedTests" -ForegroundColor Green
-Write-Host "Failed: $failedTests" -ForegroundColor Red
+# Executar testes para cada projeto
+foreach ($project in $TestProjects) {
+    if (Test-Path $project) {
+        $projectName = Split-Path $project -Leaf
+        Run-TestProject -ProjectPath $project -ProjectName $projectName
+    } else {
+        Write-Host "⚠️  Projeto de teste não encontrado: $project" -ForegroundColor Yellow
+    }
+}
 
-if ($failedTests -eq 0) {
-    Write-Host "`n🎉 All tests passed!" -ForegroundColor Green
+# Resumo final
+Write-Host "`n📊 Resumo dos Testes:" -ForegroundColor Cyan
+Write-Host "==================" -ForegroundColor Cyan
+
+foreach ($result in $Results) {
+    $status = if ($result.Success) { "✅" } else { "❌" }
+    Write-Host "$status $($result.Project)" -ForegroundColor $(if ($result.Success) { "Green" } else { "Red" })
+}
+
+Write-Host "`n📈 Estatísticas:" -ForegroundColor Cyan
+Write-Host "Total de testes: $TotalTests" -ForegroundColor White
+Write-Host "Testes aprovados: $PassedTests" -ForegroundColor Green
+Write-Host "Testes falhados: $FailedTests" -ForegroundColor Red
+
+if ($TotalTests -gt 0) {
+    $successRate = [math]::Round(($PassedTests / $TotalTests) * 100, 2)
+    Write-Host "Taxa de sucesso: $successRate%" -ForegroundColor $(if ($successRate -ge 80) { "Green" } elseif ($successRate -ge 60) { "Yellow" } else { "Red" })
+}
+
+# Verificar se todos os testes passaram
+$allPassed = $Results | Where-Object { $_.Success } | Measure-Object | Select-Object -ExpandProperty Count
+$totalProjects = $Results.Count
+
+if ($allPassed -eq $totalProjects -and $totalProjects -gt 0) {
+    Write-Host "`n🎉 Todos os testes passaram com sucesso!" -ForegroundColor Green
     exit 0
 } else {
-    Write-Host "`n💥 Some tests failed!" -ForegroundColor Red
+    Write-Host "`n💥 Alguns testes falharam. Verifique os detalhes acima." -ForegroundColor Red
     exit 1
 } 
